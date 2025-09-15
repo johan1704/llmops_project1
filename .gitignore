@@ -1,0 +1,4 @@
+venv/
+logs/
+RAG_Medical_Chatbot_Projet_9.egg-info/
+.env

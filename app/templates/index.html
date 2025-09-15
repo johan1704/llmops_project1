@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>🔍 AI Medical Chatbot</title>
+  <style>
+    :root {
+      --primary-color: #0066cc;
+      --secondary-color: #f5f5f5;
+      --user-bg: #cfe8ff;
+      --assistant-bg: #ffffff;
+      --text-color: #333333;
+      --border-radius: 12px;
+      --box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      --font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background: var(--secondary-color);
+      font-family: var(--font-family);
+      color: var(--text-color);
+      padding: 2rem;
+      display: flex;
+      justify-content: center;
+    }
+
+    .chat-container {
+      background: #fff;
+      max-width: 700px;
+      width: 100%;
+      border-radius: var(--border-radius);
+      box-shadow: var(--box-shadow);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      height: 80vh;
+    }
+
+    .chat-header {
+      background: var(--primary-color);
+      color: #fff;
+      padding: 1rem 1.5rem;
+      font-size: 1.25rem;
+      font-weight: bold;
+    }
+
+    .chat-box {
+      flex: 1;
+      padding: 1rem 1.5rem;
+      overflow-y: auto;
+      background: #fafafa;
+    }
+
+    .message {
+      margin-bottom: 1rem;
+      max-width: 70%;
+      padding: 0.75rem 1rem;
+      border-radius: var(--border-radius);
+      position: relative;
+      word-wrap: break-word;
+    }
+
+    .message.user {
+      align-self: flex-end;
+      background: var(--user-bg);
+      border-bottom-right-radius: 4px;
+      border-bottom-left-radius: var(--border-radius);
+      border-top-left-radius: var(--border-radius);
+      border-top-right-radius: var(--border-radius);
+    }
+
+    .message.assistant {
+      align-self: flex-start;
+      background: var(--assistant-bg);
+      border-bottom-left-radius: 4px;
+      border-bottom-right-radius: var(--border-radius);
+      border-top-left-radius: var(--border-radius);
+      border-top-right-radius: var(--border-radius);
+      box-shadow: inset 0 0 0 1px rgba(0,0,0,0.05);
+    }
+
+    .message strong {
+      display: block;
+      margin-bottom: 0.2rem;
+      font-size: 0.9rem;
+      color: var(--primary-color);
+    }
+
+    form {
+      padding: 1rem 1.5rem;
+      background: #fff;
+      border-top: 1px solid #eee;
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    textarea {
+      flex: 1;
+      padding: 0.75rem;
+      font-size: 1rem;
+      border: 1px solid #ccc;
+      border-radius: var(--border-radius);
+      resize: vertical;
+      min-height: 3rem;
+      max-height: 8rem;
+    }
+
+    textarea:focus {
+      border-color: var(--primary-color);
+      outline: none;
+      box-shadow: 0 0 0 2px rgba(0, 102, 204, 0.2);
+    }
+
+    button {
+      background: var(--primary-color);
+      color: #fff;
+      border: none;
+      padding: 0.75rem 1.5rem;
+      font-size: 1rem;
+      border-radius: var(--border-radius);
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s;
+    }
+
+    button:hover {
+      background: #005bb5;
+      transform: translateY(-1px);
+    }
+
+    .clear-btn {
+      background: #999;
+    }
+
+    .clear-btn:hover {
+      background: #777;
+    }
+
+    .error {
+      color: #d9534f;
+      padding: 0.5rem 1.5rem;
+      background: #f2dede;
+      border-radius: var(--border-radius);
+      margin-bottom: 1rem;
+    }
+
+    @media (max-width: 600px) {
+      .chat-container {
+        height: 90vh;
+      }
+      .message {
+        max-width: 90%;
+      }
+      textarea {
+        font-size: 0.95rem;
+      }
+      .chat-header {
+        font-size: 1.1rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="chat-container">
+    <div class="chat-header">Medical Chatbot</div>
+    {% if error %}
+      <p class="error">{{ error }}</p>
+    {% endif %}
+    <div id="chat-box" class="chat-box">
+      {% for msg in messages %}
+        <div class="message {{ msg.role }}">
+          <strong>{{ msg.role|capitalize }}:</strong>
+          {{ msg.content | safe | nl2br }}
+        </div>
+      {% endfor %}
+    </div>
+    <form method="post" action="{{ url_for('index') }}">
+      <textarea name="prompt" placeholder="Ask a medical question..." required></textarea>
+      <button type="submit">Send</button>
+    </form>
+    <form method="get" action="{{ url_for('clear') }}">
+      <button type="submit" class="clear-btn">Clear Chat</button>
+    </form>
+  </div>
+</body>
+</html>

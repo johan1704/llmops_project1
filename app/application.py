@@ -5,7 +5,7 @@ import os
 
 
 load_dotenv()
-HF_TOKEN = os.environ.get("HF_TOKEN")
+HF_TOKEN = os.environ.get("GROQ_API_KEY")
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)

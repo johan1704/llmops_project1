@@ -43,8 +43,7 @@ pipeline {
             }
         }
         
-       
-        stage('Deploy to EC2 Instance') {
+       stage('Deploy to EC2 Instance') {
     steps {
         withCredentials([
             [$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-ec2-token'],
@@ -54,44 +53,66 @@ pipeline {
             script {
                 echo "Deploying to EC2 instance: ${env.EC2_INSTANCE_IP}"
 
-                sh """
-                ssh -o StrictHostKeyChecking=no -i ${SSH_KEY} ${env.EC2_SSH_USER}@${env.EC2_INSTANCE_IP} << 'EOF'
+                // Fixer les permissions de la clé SSH
+                sh 'chmod 600 $SSH_KEY'
+
+                // Créer un script de déploiement temporaire
+                writeFile file: 'deploy_script.sh', text: """#!/bin/bash
+set -e
+
+# Configurer AWS credentials
+export AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+export AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+
+# Étape 1: Vérifier l'identité AWS
+echo "=== Vérification de l'identité AWS ==="
+aws sts get-caller-identity
+
+# Récupérer l'account ID pour construire l'URI ECR
+ACCOUNT_ID=\$(aws sts get-caller-identity --query Account --output text)
+ECR_URI="\$ACCOUNT_ID.dkr.ecr.${env.AWS_REGION}.amazonaws.com"
+IMAGE_URI="\$ECR_URI/${env.ECR_REPO}:${env.IMAGE_TAG}"
+
+echo "ECR URI: \$ECR_URI"
+echo "Image URI: \$IMAGE_URI"
+
+# Étape 2: Se connecter à ECR
+echo "=== Connexion à ECR ==="
+aws ecr get-login-password --region ${env.AWS_REGION} | sudo docker login --username AWS --password-stdin \$ECR_URI
+
+# Nettoyer les anciens conteneurs
+echo "=== Nettoyage des anciens conteneurs ==="
+sudo docker stop ${env.SERVICE_NAME} || true
+sudo docker rm ${env.SERVICE_NAME} || true
+
+# Étape 3: Pull de l'image
+echo "=== Pull de l'image Docker ==="
+sudo docker pull \$IMAGE_URI
+
+# Étape 4: Run du conteneur
+echo "=== Démarrage du nouveau conteneur ==="
+sudo docker run -d \\
+    --name ${env.SERVICE_NAME} \\
+    -p 80:5000 \\
+    --restart unless-stopped \\
+    -e GROQ_API_KEY=${GROQ_API_KEY} \\
+    \$IMAGE_URI
+
+# Vérification
+echo "=== Vérification du déploiement ==="
+sudo docker ps | grep ${env.SERVICE_NAME}
+
+echo "Deployment completed successfully!"
+"""
+
+                // Copier le script sur EC2 et l'exécuter
+                sh '''
+                # Copier le script sur EC2
+                scp -o StrictHostKeyChecking=no -i $SSH_KEY deploy_script.sh $EC2_SSH_USER@$EC2_INSTANCE_IP:/tmp/deploy_script.sh
                 
-                # Étape 1: Vérifier l'identité AWS
-                aws sts get-caller-identity
-                
-                # Récupérer l'account ID pour construire l'URI ECR
-                ACCOUNT_ID=\$(aws sts get-caller-identity --query Account --output text)
-                ECR_URI="\$ACCOUNT_ID.dkr.ecr.${env.AWS_REGION}.amazonaws.com"
-                IMAGE_URI="\$ECR_URI/${env.ECR_REPO}:${env.IMAGE_TAG}"
-                
-                echo "ECR URI: \$ECR_URI"
-                echo "Image URI: \$IMAGE_URI"
-                
-                # Étape 2: Se connecter à ECR
-                aws ecr get-login-password --region ${env.AWS_REGION} | docker login --username AWS --password-stdin \$ECR_URI
-                
-                # Nettoyer les anciens conteneurs
-                docker stop ${env.SERVICE_NAME} || true
-                docker rm ${env.SERVICE_NAME} || true
-                
-                # Étape 3: Pull de l'image
-                docker pull \$IMAGE_URI
-                
-                # Étape 4: Run du conteneur
-                docker run -d \\
-                    --name ${env.SERVICE_NAME} \\
-                    -p 80:5000 \\
-                    --restart unless-stopped \\
-                    -e GROQ_API_KEY=${GROQ_API_KEY} \\
-                    \$IMAGE_URI
-                
-                # Vérification
-                echo "Deployment completed. Container status:"
-                docker ps | grep ${env.SERVICE_NAME}
-                
-EOF
-                """
+                # Exécuter le script sur EC2
+                ssh -o StrictHostKeyChecking=no -i $SSH_KEY $EC2_SSH_USER@$EC2_INSTANCE_IP "chmod +x /tmp/deploy_script.sh && /tmp/deploy_script.sh && rm -f /tmp/deploy_script.sh"
+                '''
                 
                 echo "Deployment to EC2 instance completed successfully!"
             }

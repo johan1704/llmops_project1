@@ -44,8 +44,8 @@ pipeline {
         }
         
         stage('Deploy to EC2 Instance') {
-    steps {
-        withCredentials([
+            steps {
+               withCredentials([
             [$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-token'],
             sshUserPrivateKey(credentialsId: 'ec2-ssh-key', keyFileVariable: 'SSH_KEY', usernameVariable: 'SSH_USER'),
             string(credentialsId: 'groq-api-key', variable: 'GROQ_API_KEY')

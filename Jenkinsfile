@@ -43,53 +43,54 @@ pipeline {
             }
         }
         
+       
         stage('Deploy to EC2 Instance') {
-            steps {
-               withCredentials([
-            [$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-token'],
+    steps {
+        withCredentials([
+            [$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-ec2-token'],
             sshUserPrivateKey(credentialsId: 'ec2-ssh-key', keyFileVariable: 'SSH_KEY', usernameVariable: 'SSH_USER'),
             string(credentialsId: 'groq-api-key', variable: 'GROQ_API_KEY')
         ]) {
             script {
-                def accountId = sh(script: "aws sts get-caller-identity --query Account --output text", returnStdout: true).trim()
-                def ecrUrl = "${accountId}.dkr.ecr.${env.AWS_REGION}.amazonaws.com/${env.ECR_REPO}"
-                def imageFullTag = "${ecrUrl}:${IMAGE_TAG}"
-
                 echo "Deploying to EC2 instance: ${env.EC2_INSTANCE_IP}"
 
                 sh """
-                #!/bin/bash
-                # Nettoyer les ressources Docker existantes sur EC2
                 ssh -o StrictHostKeyChecking=no -i ${SSH_KEY} ${env.EC2_SSH_USER}@${env.EC2_INSTANCE_IP} << 'EOF'
                 
-                # Nettoyer les anciens conteneurs et images
-                sudo docker stop ${env.SERVICE_NAME} || true
-                sudo docker rm ${env.SERVICE_NAME} || true
-                sudo docker system prune -a -f || true
+                # Étape 1: Vérifier l'identité AWS
+                aws sts get-caller-identity
                 
-                # Se connecter à ECR
-                export AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
-                export AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-                export AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN}
-                aws ecr get-login-password --region ${env.AWS_REGION} | sudo docker login --username AWS --password-stdin ${ecrUrl}
+                # Récupérer l'account ID pour construire l'URI ECR
+                ACCOUNT_ID=\$(aws sts get-caller-identity --query Account --output text)
+                ECR_URI="\$ACCOUNT_ID.dkr.ecr.${env.AWS_REGION}.amazonaws.com"
+                IMAGE_URI="\$ECR_URI/${env.ECR_REPO}:${env.IMAGE_TAG}"
                 
-                # Pull et run la nouvelle image avec la variable d'environnement
-                sudo docker pull ${imageFullTag}
-                sudo docker run -d \\
+                echo "ECR URI: \$ECR_URI"
+                echo "Image URI: \$IMAGE_URI"
+                
+                # Étape 2: Se connecter à ECR
+                aws ecr get-login-password --region ${env.AWS_REGION} | docker login --username AWS --password-stdin \$ECR_URI
+                
+                # Nettoyer les anciens conteneurs
+                docker stop ${env.SERVICE_NAME} || true
+                docker rm ${env.SERVICE_NAME} || true
+                
+                # Étape 3: Pull de l'image
+                docker pull \$IMAGE_URI
+                
+                # Étape 4: Run du conteneur
+                docker run -d \\
                     --name ${env.SERVICE_NAME} \\
                     -p 80:5000 \\
                     --restart unless-stopped \\
                     -e GROQ_API_KEY=${GROQ_API_KEY} \\
-                    ${imageFullTag}
+                    \$IMAGE_URI
                 
-                # Vérifier le déploiement
+                # Vérification
                 echo "Deployment completed. Container status:"
-                sudo docker ps | grep ${env.SERVICE_NAME}
+                docker ps | grep ${env.SERVICE_NAME}
                 
-                # Vérifier que la variable d'environnement est bien définie
-                sudo docker exec ${env.SERVICE_NAME} printenv GROQ_API_KEY
-                
-                EOF
+EOF
                 """
                 
                 echo "Deployment to EC2 instance completed successfully!"
@@ -97,7 +98,6 @@ pipeline {
         }
     }
 }
-        
         stage('Verify Deployment') {
             steps {
                 script {
